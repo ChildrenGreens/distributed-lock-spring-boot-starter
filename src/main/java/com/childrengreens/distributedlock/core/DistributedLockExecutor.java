@@ -23,7 +23,13 @@ import java.util.concurrent.TimeUnit;
  * Executes distributed lock acquisition and release against a backing store.
  */
 public interface DistributedLockExecutor {
+    /**
+     * Attempts to acquire a lock for the given key.
+     */
     boolean tryLock(String key, LockType lockType, long waitTime, long leaseTime, TimeUnit unit) throws Exception;
 
+    /**
+     * Releases a previously acquired lock.
+     */
     void unlock(String key, LockType lockType) throws Exception;
 }

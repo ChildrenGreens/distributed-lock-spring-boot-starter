@@ -19,8 +19,12 @@ package com.childrengreens.distributedlock.annotation;
  * Supported lock flavors across backing stores.
  */
 public enum LockType {
+    /** Reentrant lock (default). */
     REENTRANT,
+    /** Fair lock when supported by the backend. */
     FAIR,
+    /** Read lock from a read-write lock. */
     READ,
+    /** Write lock from a read-write lock. */
     WRITE
 }

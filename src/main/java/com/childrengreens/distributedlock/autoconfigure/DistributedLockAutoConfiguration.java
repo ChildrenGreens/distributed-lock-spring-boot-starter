@@ -40,12 +40,18 @@ import org.springframework.context.annotation.Configuration;
 @AutoConfiguration
 @EnableConfigurationProperties(DistributedLockProperties.class)
 public class DistributedLockAutoConfiguration {
+    /**
+     * Creates the default lock key resolver.
+     */
     @Bean
     @ConditionalOnMissingBean
     public LockKeyResolver lockKeyResolver() {
         return new SpelLockKeyResolver();
     }
 
+    /**
+     * Advisor that applies distributed locking to annotated methods.
+     */
     @Bean
     @ConditionalOnBean(DistributedLockExecutor.class)
     @ConditionalOnMissingBean
@@ -56,10 +62,17 @@ public class DistributedLockAutoConfiguration {
         return new DistributedLockAdvisor(interceptor);
     }
 
+    /**
+     * Redisson executor configuration.
+     */
     @Configuration(proxyBeanMethods = false)
     @ConditionalOnClass(RedissonClient.class)
     @ConditionalOnBean(RedissonClient.class)
     static class RedissonExecutorConfiguration {
+
+        /**
+         * Creates a Redisson-based executor.
+         */
         @Bean
         @ConditionalOnMissingBean(DistributedLockExecutor.class)
         public DistributedLockExecutor redissonDistributedLockExecutor(RedissonClient client) {
@@ -67,10 +80,17 @@ public class DistributedLockAutoConfiguration {
         }
     }
 
+    /**
+     * Zookeeper executor configuration.
+     */
     @Configuration(proxyBeanMethods = false)
     @ConditionalOnClass(CuratorFramework.class)
     @ConditionalOnBean(CuratorFramework.class)
     static class ZookeeperExecutorConfiguration {
+
+        /**
+         * Creates a Zookeeper-based executor.
+         */
         @Bean
         @ConditionalOnMissingBean(DistributedLockExecutor.class)
         public DistributedLockExecutor zookeeperDistributedLockExecutor(CuratorFramework client) {
@@ -78,10 +98,17 @@ public class DistributedLockAutoConfiguration {
         }
     }
 
+    /**
+     * Etcd executor configuration.
+     */
     @Configuration(proxyBeanMethods = false)
     @ConditionalOnClass(Client.class)
     @ConditionalOnBean(Client.class)
     static class EtcdExecutorConfiguration {
+
+        /**
+         * Creates an Etcd-based executor.
+         */
         @Bean
         @ConditionalOnMissingBean(DistributedLockExecutor.class)
         public DistributedLockExecutor etcdDistributedLockExecutor(Client client) {

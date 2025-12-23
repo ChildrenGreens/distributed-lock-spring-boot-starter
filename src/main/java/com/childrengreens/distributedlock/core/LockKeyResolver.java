@@ -21,5 +21,8 @@ import java.lang.reflect.Method;
  * Resolves a lock key for a given method invocation.
  */
 public interface LockKeyResolver {
+    /**
+     * Resolves a lock key for the given invocation context and key expression.
+     */
     String resolveKey(Method method, Object[] args, Object target, String keyExpression);
 }

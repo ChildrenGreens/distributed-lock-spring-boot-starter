@@ -20,7 +20,7 @@ jobs:
           file: "target/site/jacoco/jacoco.xml"
 
 workflows:
-  build-multi-source-starter:
+  build-distributed-lock-starter:
     jobs:
       - build-and-test:
           name: build-and-test-jdk17

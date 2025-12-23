@@ -1,23 +1,23 @@
 = Distributed-Lock-Spring-Boot-Starter
 
-link:README_zh.adoc[中文说明]
+link:README.adoc[English]
 
-== Overview
-A Spring Boot starter that provides annotation-driven distributed locks via AOP.
-Supported backends: Redisson, Zookeeper (Curator), and Etcd (jetcd).
+== 概述
+这是一个 Spring Boot Starter，通过 AOP 提供基于注解的分布式锁能力。
+支持的后端：Redisson、Zookeeper（Curator）和 Etcd（jetcd）。
 
-== Features
-- +@DistributedLock+ annotation for method-level locking
-- SpEL-based lock key resolution with sensible defaults
-- Multiple lock types: reentrant, fair, read, write
-- Auto-configuration based on available client beans
+== 特性
+- +@DistributedLock+ 注解实现方法级加锁
+- 基于 SpEL 的锁键解析并提供默认策略
+- 多种锁类型：可重入、公平、读、写
+- 按客户端 Bean 自动配置执行器
 
-== Requirements
+== 运行环境
 - Java 17+
-- Spring Boot 3.5.x
+- Spring Boot 3.5.9
 
-== Installation
-Add the starter dependency and one backend client dependency.
+== 安装
+添加 Starter 依赖，并选择一个后端客户端依赖。
 
 Maven:
 [source,xml]
@@ -29,7 +29,7 @@ Maven:
 </dependency>
 ----
 
-Backend dependencies (pick one or more):
+后端依赖（可选其一或多个）：
 [source,xml]
 ----
 <dependency>
@@ -49,8 +49,8 @@ Backend dependencies (pick one or more):
 </dependency>
 ----
 
-== Configuration
-Application properties:
+== 配置
+application.yml:
 [source,yaml]
 ----
 distributed:
@@ -58,11 +58,11 @@ distributed:
     prefix: lock
 ----
 
-- +distributed.lock.prefix+ (default: +lock+)
-- +distributed.lock.provider+ (optional: +redisson+, +zookeeper+, +etcd+)
+- +distributed.lock.prefix+（默认：+lock+）
+- +distributed.lock.provider+（可选：+redisson+、+zookeeper+、+etcd+）
 
-== Usage
-Annotate a method with +@DistributedLock+:
+== 使用方式
+在方法上添加 +@DistributedLock+：
 [source,java]
 ----
 import com.childrengreens.distributedlock.annotation.DistributedLock;
@@ -74,7 +74,7 @@ public void process(String orderId) {
 }
 ----
 
-SpEL examples:
+SpEL 示例：
 [source,java]
 ----
 @DistributedLock(key = "#user.id + ':' + #order.id")
@@ -86,20 +86,20 @@ public void handle(String id) {
 }
 ----
 
-Default key behavior:
-- If +key+ is empty, the key is generated as:
+默认 key 行为：
+- 当 +key+ 为空时，默认生成：
 +
 +DeclaringClass.methodName:<SimpleKey>+
 
-Prefix behavior:
-- +@DistributedLock(prefix = "...")+ overrides +distributed.lock.prefix+
-- If both are empty, no prefix is used
+Prefix 行为：
+- +@DistributedLock(prefix = "...")+ 优先于 +distributed.lock.prefix+
+- 两者都为空时不使用前缀
 
-Provider selection:
-- Set +distributed.lock.provider+ to pick the backend when multiple clients exist
+Provider 选择：
+- 当多个客户端同时存在时，可设置 +distributed.lock.provider+ 明确指定后端
 
-== Backend Setup
-The starter auto-configures the executor when a client bean exists.
+== 后端配置
+当存在对应客户端 Bean 时，Starter 会自动配置执行器。
 
 === Redisson
 [source,java]
@@ -158,21 +158,21 @@ class EtcdConfig {
 }
 ----
 
-== Lock Types
-- +REENTRANT+: default reentrant lock
-- +FAIR+: fair lock when supported
-- +READ+: read lock (read/write lock)
-- +WRITE+: write lock (read/write lock)
+== 锁类型
+- +REENTRANT+：默认可重入锁
+- +FAIR+：后端支持时使用公平锁
+- +READ+：读锁（读写锁）
+- +WRITE+：写锁（读写锁）
 
-Mapping notes:
-- Redisson: maps directly to the respective lock variants
-- Zookeeper: +FAIR+ uses a reentrant mutex implementation
-- Etcd: uses a single lock type; +LockType+ is tracked for unlock bookkeeping
+映射说明：
+- Redisson：直接映射到对应锁类型
+- Zookeeper：+FAIR+ 使用可重入互斥锁实现
+- Etcd：仅一种锁类型；+LockType+ 用于解锁时的跟踪
 
-== Error Handling
-- If a lock cannot be acquired, a +DistributedLockException+ is thrown
-- Unlock failures are logged and suppressed to avoid masking business errors
+== 错误处理
+- 获取锁失败会抛出 +DistributedLockException+
+- 解锁异常会记录日志并被吞掉，避免影响业务异常
 
-== Customization
-Provide your own +DistributedLockExecutor+ bean to override auto-configuration.
-You can also replace +LockKeyResolver+ if you need custom key resolution logic.
+== 自定义
+可以提供自定义 +DistributedLockExecutor+ Bean 以覆盖自动配置。
+也可以替换 +LockKeyResolver+ 实现自定义的 key 解析逻辑。

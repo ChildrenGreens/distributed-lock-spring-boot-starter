@@ -17,7 +17,7 @@ jobs:
           name: Build and test
           command: mvn clean install -B -V
       - codecov/upload:
-          file: "distributed-lock-spring-boot-starter/target/site/jacoco/jacoco.xml"
+          file: "target/site/jacoco/jacoco.xml"
 
 workflows:
   build-multi-source-starter:

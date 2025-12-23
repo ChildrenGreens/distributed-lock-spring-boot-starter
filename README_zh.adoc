@@ -14,7 +14,7 @@ link:README.adoc[English]
 
 == 运行环境
 - Java 17+
-- Spring Boot 3.5.9
+- Spring Boot 3.5.x
 
 == 安装
 添加 Starter 依赖，并选择一个后端客户端依赖。
@@ -25,7 +25,7 @@ Maven:
 <dependency>
   <groupId>com.childrengreens</groupId>
   <artifactId>distributed-lock-spring-boot-starter</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
+  <version>${latest-version}</version>
 </dependency>
 ----
 

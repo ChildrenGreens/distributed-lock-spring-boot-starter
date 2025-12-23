@@ -25,7 +25,7 @@ Maven:
 <dependency>
   <groupId>com.childrengreens</groupId>
   <artifactId>distributed-lock-spring-boot-starter</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
+  <version>${latest-version}</version>
 </dependency>
 ----
 

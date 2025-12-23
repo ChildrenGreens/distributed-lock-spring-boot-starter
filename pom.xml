@@ -59,6 +59,7 @@
         <curator.version>5.9.0</curator.version>
         <jetcd.version>0.8.6</jetcd.version>
         <jacoco.version>0.8.13</jacoco.version>
+        <zookeeper.version>3.9.4</zookeeper.version>
     </properties>
 
     <dependencyManagement>
@@ -69,6 +70,12 @@
                 <version>${spring.boot.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.zookeeper</groupId>
+                <artifactId>zookeeper</artifactId>
+                <version>${zookeeper.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

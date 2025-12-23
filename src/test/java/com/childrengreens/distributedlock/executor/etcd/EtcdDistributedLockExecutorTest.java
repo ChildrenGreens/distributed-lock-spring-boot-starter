@@ -24,6 +24,8 @@ import io.etcd.jetcd.lease.LeaseGrantResponse;
 import io.etcd.jetcd.lease.LeaseRevokeResponse;
 import io.etcd.jetcd.lock.LockResponse;
 import io.etcd.jetcd.lock.UnlockResponse;
+import io.etcd.jetcd.support.CloseableClient;
+import io.grpc.stub.StreamObserver;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -50,6 +52,7 @@ class EtcdDistributedLockExecutorTest {
         LockResponse lockResponse = mock(LockResponse.class);
         UnlockResponse unlockResponse = mock(UnlockResponse.class);
         LeaseRevokeResponse revokeResponse = mock(LeaseRevokeResponse.class);
+        CloseableClient keepAliveClient = mock(CloseableClient.class);
 
         when(client.getLockClient()).thenReturn(lockClient);
         when(client.getLeaseClient()).thenReturn(leaseClient);
@@ -60,6 +63,7 @@ class EtcdDistributedLockExecutorTest {
         when(lockResponse.getKey()).thenReturn(lockKey);
         when(lockClient.lock(eq(lockKey), eq(12L))).thenReturn(CompletableFuture.completedFuture(lockResponse));
         when(lockClient.unlock(eq(lockKey))).thenReturn(CompletableFuture.completedFuture(unlockResponse));
+        when(leaseClient.keepAlive(eq(12L), any(StreamObserver.class))).thenReturn(keepAliveClient);
         when(leaseClient.revoke(12L)).thenReturn(CompletableFuture.completedFuture(revokeResponse));
 
         EtcdDistributedLockExecutor executor = new EtcdDistributedLockExecutor(client);
@@ -67,8 +71,37 @@ class EtcdDistributedLockExecutorTest {
 
         assertThat(acquired).isTrue();
         executor.unlock("k", LockType.REENTRANT);
+        verify(keepAliveClient).close();
         verify(lockClient).unlock(lockKey);
         verify(leaseClient).revoke(12L);
+    }
+
+    @Test
+    void tryLockKeepsLeaseAliveWhileWaiting() throws Exception {
+        // Wait time longer than lease time should enable keep-alive and refresh after acquire.
+        Client client = mock(Client.class);
+        Lock lockClient = mock(Lock.class);
+        Lease leaseClient = mock(Lease.class);
+        LeaseGrantResponse grantResponse = mock(LeaseGrantResponse.class);
+        LockResponse lockResponse = mock(LockResponse.class);
+        CloseableClient keepAliveClient = mock(CloseableClient.class);
+
+        when(client.getLockClient()).thenReturn(lockClient);
+        when(client.getLeaseClient()).thenReturn(leaseClient);
+        when(grantResponse.getID()).thenReturn(21L);
+        when(leaseClient.grant(1L)).thenReturn(CompletableFuture.completedFuture(grantResponse));
+        when(leaseClient.keepAlive(eq(21L), any(StreamObserver.class))).thenReturn(keepAliveClient);
+
+        ByteSequence lockKey = ByteSequence.from("k", StandardCharsets.UTF_8);
+        when(lockResponse.getKey()).thenReturn(lockKey);
+        when(lockClient.lock(eq(lockKey), eq(21L))).thenReturn(CompletableFuture.completedFuture(lockResponse));
+
+        EtcdDistributedLockExecutor executor = new EtcdDistributedLockExecutor(client);
+        boolean acquired = executor.tryLock("k", LockType.REENTRANT, 5, 1, TimeUnit.SECONDS);
+
+        assertThat(acquired).isTrue();
+        verify(keepAliveClient).close();
+        verify(leaseClient).keepAliveOnce(21L);
     }
 
     @Test
@@ -129,16 +162,19 @@ class EtcdDistributedLockExecutorTest {
         Lease leaseClient = mock(Lease.class);
         LeaseGrantResponse grantResponse = mock(LeaseGrantResponse.class);
         LockResponse lockResponse = mock(LockResponse.class);
+        CloseableClient keepAliveClient = mock(CloseableClient.class);
 
         when(client.getLockClient()).thenReturn(lockClient);
         when(client.getLeaseClient()).thenReturn(leaseClient);
         when(grantResponse.getID()).thenReturn(3L);
         when(leaseClient.grant(30L)).thenReturn(CompletableFuture.completedFuture(grantResponse));
         when(lockClient.lock(any(ByteSequence.class), eq(3L))).thenReturn(CompletableFuture.completedFuture(lockResponse));
+        when(leaseClient.keepAlive(eq(3L), any(StreamObserver.class))).thenReturn(keepAliveClient);
 
         EtcdDistributedLockExecutor executor = new EtcdDistributedLockExecutor(client);
         executor.tryLock("k", LockType.REENTRANT, -1, 0, TimeUnit.SECONDS);
 
+        verify(keepAliveClient).close();
         verify(leaseClient).grant(30L);
     }
 
@@ -150,16 +186,19 @@ class EtcdDistributedLockExecutorTest {
         Lease leaseClient = mock(Lease.class);
         LeaseGrantResponse grantResponse = mock(LeaseGrantResponse.class);
         LockResponse lockResponse = mock(LockResponse.class);
+        CloseableClient keepAliveClient = mock(CloseableClient.class);
 
         when(client.getLockClient()).thenReturn(lockClient);
         when(client.getLeaseClient()).thenReturn(leaseClient);
         when(grantResponse.getID()).thenReturn(5L);
         when(leaseClient.grant(1L)).thenReturn(CompletableFuture.completedFuture(grantResponse));
         when(lockClient.lock(any(ByteSequence.class), eq(5L))).thenReturn(CompletableFuture.completedFuture(lockResponse));
+        when(leaseClient.keepAlive(eq(5L), any(StreamObserver.class))).thenReturn(keepAliveClient);
 
         EtcdDistributedLockExecutor executor = new EtcdDistributedLockExecutor(client);
         executor.tryLock("k", LockType.REENTRANT, -1, 500, TimeUnit.MILLISECONDS);
 
+        verify(keepAliveClient).close();
         verify(leaseClient).grant(1L);
     }
 }

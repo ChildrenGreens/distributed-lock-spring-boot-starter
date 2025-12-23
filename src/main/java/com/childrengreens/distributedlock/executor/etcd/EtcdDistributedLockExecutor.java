@@ -22,7 +22,10 @@ import io.etcd.jetcd.Client;
 import io.etcd.jetcd.Lease;
 import io.etcd.jetcd.Lock;
 import io.etcd.jetcd.lease.LeaseGrantResponse;
+import io.etcd.jetcd.lease.LeaseKeepAliveResponse;
 import io.etcd.jetcd.lock.LockResponse;
+import io.etcd.jetcd.support.CloseableClient;
+import io.grpc.stub.StreamObserver;
 
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
@@ -35,6 +38,20 @@ import java.util.concurrent.TimeoutException;
  */
 public class EtcdDistributedLockExecutor extends AbstractThreadLocalLockExecutor {
     private static final long DEFAULT_LEASE_SECONDS = 30;
+    private static final StreamObserver<LeaseKeepAliveResponse> NOOP_KEEP_ALIVE_OBSERVER =
+            new StreamObserver<>() {
+                @Override
+                public void onNext(LeaseKeepAliveResponse value) {
+                }
+
+                @Override
+                public void onError(Throwable t) {
+                }
+
+                @Override
+                public void onCompleted() {
+                }
+            };
 
     private final Lock lockClient;
     private final Lease leaseClient;
@@ -48,21 +65,28 @@ public class EtcdDistributedLockExecutor extends AbstractThreadLocalLockExecutor
     public boolean tryLock(String key, LockType lockType, long waitTime, long leaseTime, TimeUnit unit) throws Exception {
         long leaseSeconds = resolveLeaseSeconds(leaseTime, unit);
         long leaseId = grantLease(leaseSeconds);
+        CloseableClient keepAliveClient = startKeepAliveIfNeeded(leaseId, waitTime, unit, leaseSeconds);
         ByteSequence lockName = ByteSequence.from(key, StandardCharsets.UTF_8);
         CompletableFuture<LockResponse> future = lockClient.lock(lockName, leaseId);
         try {
             LockResponse response = waitTime < 0 ? future.get() : future.get(waitTime, unit);
+            closeKeepAlive(keepAliveClient);
+            keepAliveClient = null;
+            refreshLease(leaseId);
             pushLock(key, lockType, new EtcdLockHolder(response.getKey(), leaseId));
             return true;
         } catch (TimeoutException ex) {
             future.cancel(true);
+            closeKeepAlive(keepAliveClient);
             revokeLease(leaseId);
             return false;
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
+            closeKeepAlive(keepAliveClient);
             revokeLease(leaseId);
             throw ex;
         } catch (ExecutionException ex) {
+            closeKeepAlive(keepAliveClient);
             revokeLease(leaseId);
             throw ex;
         }
@@ -85,6 +109,32 @@ public class EtcdDistributedLockExecutor extends AbstractThreadLocalLockExecutor
 
     private void revokeLease(long leaseId) throws ExecutionException, InterruptedException {
         leaseClient.revoke(leaseId).get();
+    }
+
+    private CloseableClient startKeepAliveIfNeeded(long leaseId, long waitTime, TimeUnit unit, long leaseSeconds) {
+        if (shouldKeepAlive(waitTime, unit, leaseSeconds)) {
+            return leaseClient.keepAlive(leaseId, NOOP_KEEP_ALIVE_OBSERVER);
+        }
+        return null;
+    }
+
+    private boolean shouldKeepAlive(long waitTime, TimeUnit unit, long leaseSeconds) {
+        if (waitTime < 0) {
+            return true;
+        }
+        long waitMillis = unit.toMillis(waitTime);
+        long leaseMillis = TimeUnit.SECONDS.toMillis(leaseSeconds);
+        return waitMillis >= leaseMillis;
+    }
+
+    private void closeKeepAlive(CloseableClient keepAliveClient) {
+        if (keepAliveClient != null) {
+            keepAliveClient.close();
+        }
+    }
+
+    private void refreshLease(long leaseId) {
+        leaseClient.keepAliveOnce(leaseId);
     }
 
     private long resolveLeaseSeconds(long leaseTime, TimeUnit unit) {

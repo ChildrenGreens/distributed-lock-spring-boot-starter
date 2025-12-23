@@ -1,0 +1,163 @@
+# distributed-lock-spring-boot-starter
+
+## Overview
+A Spring Boot starter that provides annotation-driven distributed locks via AOP.
+Supported backends: Redisson, Zookeeper (Curator), and Etcd (jetcd).
+
+## Features
+- `@DistributedLock` annotation for method-level locking
+- SpEL-based lock key resolution with sensible defaults
+- Multiple lock types: reentrant, fair, read, write
+- Auto-configuration based on available client beans
+
+## Requirements
+- Java 17+
+- Spring Boot 3.3+
+
+## Installation
+Add the starter dependency and one backend client dependency.
+
+Maven:
+```xml
+<dependency>
+  <groupId>com.childrengreens</groupId>
+  <artifactId>distributed-lock-spring-boot-starter</artifactId>
+  <version>1.0-SNAPSHOT</version>
+</dependency>
+```
+
+Backend dependencies (pick one or more):
+```xml
+<dependency>
+  <groupId>org.redisson</groupId>
+  <artifactId>redisson</artifactId>
+  <version>3.27.2</version>
+</dependency>
+<dependency>
+  <groupId>org.apache.curator</groupId>
+  <artifactId>curator-recipes</artifactId>
+  <version>5.6.0</version>
+</dependency>
+<dependency>
+  <groupId>io.etcd</groupId>
+  <artifactId>jetcd-core</artifactId>
+  <version>0.7.7</version>
+</dependency>
+```
+
+## Configuration
+Application properties:
+```yaml
+distributed:
+  lock:
+    prefix: lock
+```
+
+- `distributed.lock.prefix` (default: `lock`)
+
+## Usage
+Annotate a method with `@DistributedLock`:
+```java
+import com.childrengreens.distributedlock.annotation.DistributedLock;
+import com.childrengreens.distributedlock.annotation.LockType;
+
+@DistributedLock(key = "#orderId", prefix = "order", waitTime = 3, leaseTime = 10, lockType = LockType.FAIR)
+public void process(String orderId) {
+    // business logic
+}
+```
+
+SpEL examples:
+```java
+@DistributedLock(key = "#user.id + ':' + #order.id")
+public void pay(User user, Order order) {
+}
+
+@DistributedLock(key = "@tenantProvider.tenantId + ':' + #p0")
+public void handle(String id) {
+}
+```
+
+Default key behavior:
+- If `key` is empty, the key is generated as:
+  `DeclaringClass.methodName:<SimpleKey>`
+
+Prefix behavior:
+- `@DistributedLock(prefix = "...")` overrides `distributed.lock.prefix`
+- If both are empty, no prefix is used
+
+## Backend Setup
+The starter auto-configures the executor when a client bean exists.
+
+### Redisson
+```java
+import org.redisson.Redisson;
+import org.redisson.api.RedissonClient;
+import org.redisson.config.Config;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+class RedissonConfig {
+    @Bean
+    RedissonClient redissonClient() {
+        Config config = new Config();
+        config.useSingleServer().setAddress("redis://127.0.0.1:6379");
+        return Redisson.create(config);
+    }
+}
+```
+
+### Zookeeper (Curator)
+```java
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+class CuratorConfig {
+    @Bean(initMethod = "start", destroyMethod = "close")
+    CuratorFramework curatorFramework() {
+        return CuratorFrameworkFactory.newClient(
+            "127.0.0.1:2181",
+            new ExponentialBackoffRetry(1000, 3)
+        );
+    }
+}
+```
+
+### Etcd (jetcd)
+```java
+import io.etcd.jetcd.Client;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+class EtcdConfig {
+    @Bean(destroyMethod = "close")
+    Client etcdClient() {
+        return Client.builder().endpoints("http://127.0.0.1:2379").build();
+    }
+}
+```
+
+## Lock Types
+- `REENTRANT`: default reentrant lock
+- `FAIR`: fair lock when supported
+- `READ`: read lock (read/write lock)
+- `WRITE`: write lock (read/write lock)
+
+Mapping notes:
+- Redisson: maps directly to the respective lock variants
+- Zookeeper: `FAIR` uses a reentrant mutex implementation
+- Etcd: uses a single lock type; `LockType` is tracked for unlock bookkeeping
+
+## Error Handling
+- If a lock cannot be acquired, a `DistributedLockException` is thrown
+- Unlock failures are logged and suppressed to avoid masking business errors
+
+## Customization
+Provide your own `DistributedLockExecutor` bean to override auto-configuration.
+You can also replace `LockKeyResolver` if you need custom key resolution logic.

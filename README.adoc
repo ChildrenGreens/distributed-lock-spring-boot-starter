@@ -1,3 +1,6 @@
+image:https://img.shields.io/maven-central/v/com.childrengreens/redis-multi-source-spring-boot-starter.svg["Maven Central",link="https://central.sonatype.com/artifact/com.childrengreens/distributed-lock-spring-boot-starter"]
+image:https://img.shields.io/hexpm/l/plug.svg["Apache 2",link="http://www.apache.org/licenses/LICENSE-2.0"]
+
 = Distributed-Lock-Spring-Boot-Starter
 
 link:README_zh.adoc[中文说明]

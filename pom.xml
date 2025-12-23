@@ -8,6 +8,11 @@
     <artifactId>distributed-lock-spring-boot-starter</artifactId>
     <version>${revision}</version>
 
+
+    <name>Distributed Lock Spring Boot Starter</name>
+    <description>Annotation-driven distributed locking for Spring Boot with Redisson, Zookeeper, and Etcd backends.</description>
+    <url>https://github.com/ChildrenGreens/distributed-lock-spring-boot-starter</url>
+
     <developers>
         <developer>
             <id>ChildrenGreens</id>

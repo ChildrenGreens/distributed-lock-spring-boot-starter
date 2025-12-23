@@ -57,6 +57,7 @@ distributed:
 ----
 
 - +distributed.lock.prefix+ (default: +lock+)
+- +distributed.lock.provider+ (optional: +redisson+, +zookeeper+, +etcd+)
 
 == Usage
 Annotate a method with +@DistributedLock+:
@@ -91,6 +92,9 @@ Default key behavior:
 Prefix behavior:
 - +@DistributedLock(prefix = "...")+ overrides +distributed.lock.prefix+
 - If both are empty, no prefix is used
+
+Provider selection:
+- Set +distributed.lock.provider+ to pick the backend when multiple clients exist
 
 == Backend Setup
 The starter auto-configures the executor when a client bean exists.

@@ -66,6 +66,29 @@ class DistributedLockAutoConfigurationTest {
     }
 
     @Test
+    void selectsRedissonExecutorWhenProviderSpecified() {
+        // Explicit provider selection should win when multiple clients exist.
+        contextRunner
+                .withPropertyValues("distributed.lock.provider=redisson")
+                .withBean(RedissonClient.class, () -> mock(RedissonClient.class))
+                .withBean(CuratorFramework.class, () -> mock(CuratorFramework.class))
+                .run(context -> {
+                    assertThat(context).hasSingleBean(DistributedLockExecutor.class);
+                    assertThat(context.getBean(DistributedLockExecutor.class))
+                            .isInstanceOf(RedissonDistributedLockExecutor.class);
+                });
+    }
+
+    @Test
+    void doesNotCreateExecutorWhenProviderDoesNotMatch() {
+        // Provider selection should disable non-matching executors.
+        contextRunner
+                .withPropertyValues("distributed.lock.provider=redisson")
+                .withBean(CuratorFramework.class, () -> mock(CuratorFramework.class))
+                .run(context -> assertThat(context).doesNotHaveBean(DistributedLockExecutor.class));
+    }
+
+    @Test
     void createsZookeeperExecutorWhenClientPresent() {
         // Zookeeper executor should be chosen when CuratorFramework is available.
         contextRunner.withBean(CuratorFramework.class, () -> mock(CuratorFramework.class))

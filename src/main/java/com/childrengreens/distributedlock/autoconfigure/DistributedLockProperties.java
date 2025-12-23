@@ -23,6 +23,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "distributed.lock")
 public class DistributedLockProperties {
     private String prefix = "lock";
+    /**
+     * Optional provider selection: redisson, zookeeper, or etcd.
+     */
+    private String provider;
 
     public String getPrefix() {
         return prefix;
@@ -30,5 +34,13 @@ public class DistributedLockProperties {
 
     public void setPrefix(String prefix) {
         this.prefix = prefix;
+    }
+
+    public String getProvider() {
+        return provider;
+    }
+
+    public void setProvider(String provider) {
+        this.provider = provider;
     }
 }

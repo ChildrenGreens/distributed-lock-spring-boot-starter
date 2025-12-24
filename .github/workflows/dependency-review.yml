@@ -1,0 +1,26 @@
+name: Dependency Review
+
+on:
+  # Run only for PRs to review dependency changes.
+  pull_request:
+
+permissions:
+  # Read repo contents and PR metadata needed by dependency review.
+  contents: read
+  pull-requests: read
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          # Log outbound connections without blocking.
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4

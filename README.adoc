@@ -1,6 +1,6 @@
 image:https://dl.circleci.com/status-badge/img/circleci/Uy51fPbZSgy15X8yEZTik4/6Jt4RQCWpR8ngC57fJAX2T/tree/main.svg?style=shield["CircleCI", link="https://dl.circleci.com/status-badge/redirect/circleci/Uy51fPbZSgy15X8yEZTik4/6Jt4RQCWpR8ngC57fJAX2T/tree/main"]
 image:https://codecov.io/gh/ChildrenGreens/distributed-lock-spring-boot-starter/branch/main/graph/badge.svg?token=YV49OXIUYD["codecov",link="https://codecov.io/gh/ChildrenGreens/distributed-lock-spring-boot-starter"]
-image:https://img.shields.io/maven-central/v/com.childrengreens/redis-multi-source-spring-boot-starter.svg["Maven Central",link="https://central.sonatype.com/artifact/com.childrengreens/distributed-lock-spring-boot-starter"]
+image:https://img.shields.io/maven-central/v/com.childrengreens/distributed-lock-spring-boot-starter.svg["Maven Central",link="https://central.sonatype.com/artifact/com.childrengreens/distributed-lock-spring-boot-starter"]
 image:https://img.shields.io/hexpm/l/plug.svg["Apache 2",link="http://www.apache.org/licenses/LICENSE-2.0"]
 
 = Distributed-Lock-Spring-Boot-Starter

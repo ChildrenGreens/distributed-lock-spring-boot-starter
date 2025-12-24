@@ -14,7 +14,7 @@ link:README.adoc[English]
 
 == 运行环境
 - Java 17+
-- Spring Boot 3.5.x
+- Spring Boot 4.0.x
 
 == 安装
 添加 Starter 依赖，并选择一个后端客户端依赖。

@@ -10,7 +10,7 @@ jobs:
         type: string
         default: "17.0"
     docker:
-      - image: cimg/openjdk:<< parameters.jdk-version >>  # Java base image (17/21)
+      - image: cimg/openjdk:<< parameters.jdk-version >>  # Java base image (17/21/25)
     steps:
       - checkout  # Fetch repository code
       - run:

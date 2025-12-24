@@ -48,6 +48,7 @@ public class SpelLockKeyResolver implements LockKeyResolver, BeanFactoryAware {
         if (beanFactory != null) {
             context.setBeanResolver(new BeanFactoryResolver(beanFactory));
         }
+        // keyExpression is trusted input defined by developers only
         Object value = parser.parseExpression(keyExpression).getValue(context);
         return value == null ? "null" : value.toString();
     }

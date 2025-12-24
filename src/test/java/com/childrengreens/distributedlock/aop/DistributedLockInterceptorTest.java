@@ -39,6 +39,16 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class DistributedLockInterceptorTest {
+    private static final String KEY_EXPRESSION = "#p0";
+    private static final String RESOLVED_KEY = "core";
+    private static final String METHOD_PREFIX = "method";
+    private static final String METHOD_LOCK_KEY = METHOD_PREFIX + ":" + RESOLVED_KEY;
+    private static final String GLOBAL_PREFIX = "global";
+    private static final String GLOBAL_LOCK_KEY = GLOBAL_PREFIX + ":" + RESOLVED_KEY;
+    private static final long WAIT_TIME = 5L;
+    private static final long LEASE_TIME = 10L;
+    private static final TimeUnit TIME_UNIT = TimeUnit.SECONDS;
+
     static class SampleService {
         @DistributedLock(key = "#p0", prefix = "method", waitTime = 5, leaseTime = 10, timeUnit = TimeUnit.SECONDS,
                 lockType = LockType.FAIR)
@@ -59,122 +69,70 @@ class DistributedLockInterceptorTest {
     @Test
     void invokeSkipsWhenNoAnnotation() throws Throwable {
         // No annotation means no lock interaction.
-        SampleService target = new SampleService();
-        Method method = SampleService.class.getDeclaredMethod("plain", String.class);
-        MethodInvocation invocation = mock(MethodInvocation.class);
-        DistributedLockExecutor executor = mock(DistributedLockExecutor.class);
-        LockKeyResolver keyResolver = mock(LockKeyResolver.class);
-        DistributedLockProperties properties = new DistributedLockProperties();
+        InvocationFixture fixture = fixtureFor("plain", "x");
+        fixture.whenProceedReturn("plain:x");
 
-        when(invocation.getMethod()).thenReturn(method);
-        when(invocation.getThis()).thenReturn(target);
-        when(invocation.getArguments()).thenReturn(new Object[]{"x"});
-        when(invocation.proceed()).thenReturn("plain:x");
-
-        DistributedLockInterceptor interceptor = new DistributedLockInterceptor(executor, keyResolver, properties);
-        Object result = interceptor.invoke(invocation);
+        Object result = fixture.interceptor().invoke(fixture.invocation);
 
         assertThat(result).isEqualTo("plain:x");
-        verify(executor, never()).tryLock(any(), any(), anyLong(), anyLong(), any());
-        verify(executor, never()).unlock(any(), any());
+        verify(fixture.executor, never()).tryLock(any(), any(), anyLong(), anyLong(), any());
+        verify(fixture.executor, never()).unlock(any(), any());
     }
 
     @Test
     void invokeAcquiresAndReleasesLock() throws Throwable {
         // Happy path: lock then proceed then unlock.
-        SampleService target = new SampleService();
-        Method method = SampleService.class.getDeclaredMethod("locked", String.class);
-        MethodInvocation invocation = mock(MethodInvocation.class);
-        DistributedLockExecutor executor = mock(DistributedLockExecutor.class);
-        LockKeyResolver keyResolver = mock(LockKeyResolver.class);
-        DistributedLockProperties properties = new DistributedLockProperties();
-
-        when(invocation.getMethod()).thenReturn(method);
-        when(invocation.getThis()).thenReturn(target);
-        when(invocation.getArguments()).thenReturn(new Object[]{"y"});
-        when(invocation.proceed()).thenReturn("locked:y");
-        when(keyResolver.resolveKey(eq(method), any(Object[].class), eq(target), eq("#p0"))).thenReturn("core");
-        when(executor.tryLock(eq("method:core"), eq(LockType.FAIR), eq(5L), eq(10L), eq(TimeUnit.SECONDS)))
+        InvocationFixture fixture = fixtureFor("locked", "y");
+        fixture.whenProceedReturn("locked:y");
+        fixture.stubResolvedKey(KEY_EXPRESSION, RESOLVED_KEY);
+        when(fixture.executor.tryLock(eq(METHOD_LOCK_KEY), eq(LockType.FAIR), eq(WAIT_TIME), eq(LEASE_TIME), eq(TIME_UNIT)))
                 .thenReturn(true);
 
-        DistributedLockInterceptor interceptor = new DistributedLockInterceptor(executor, keyResolver, properties);
-        Object result = interceptor.invoke(invocation);
+        Object result = fixture.interceptor().invoke(fixture.invocation);
 
         assertThat(result).isEqualTo("locked:y");
-        verify(executor).unlock("method:core", LockType.FAIR);
+        verify(fixture.executor).unlock(METHOD_LOCK_KEY, LockType.FAIR);
     }
 
     @Test
     void invokeUsesGlobalPrefixWhenMethodPrefixMissing() throws Throwable {
         // Method-level prefix should fall back to global prefix.
-        SampleService target = new SampleService();
-        Method method = SampleService.class.getDeclaredMethod("defaultPrefix", String.class);
-        MethodInvocation invocation = mock(MethodInvocation.class);
-        DistributedLockExecutor executor = mock(DistributedLockExecutor.class);
-        LockKeyResolver keyResolver = mock(LockKeyResolver.class);
-        DistributedLockProperties properties = new DistributedLockProperties();
-        properties.setPrefix("global");
-
-        when(invocation.getMethod()).thenReturn(method);
-        when(invocation.getThis()).thenReturn(target);
-        when(invocation.getArguments()).thenReturn(new Object[]{"z"});
-        when(invocation.proceed()).thenReturn("default:z");
-        when(keyResolver.resolveKey(eq(method), any(Object[].class), eq(target), eq("#p0"))).thenReturn("core");
-        when(executor.tryLock(eq("global:core"), eq(LockType.REENTRANT), eq(0L), eq(-1L), eq(TimeUnit.SECONDS)))
+        InvocationFixture fixture = fixtureFor("defaultPrefix", "z");
+        fixture.properties.setPrefix(GLOBAL_PREFIX);
+        fixture.whenProceedReturn("default:z");
+        fixture.stubResolvedKey(KEY_EXPRESSION, RESOLVED_KEY);
+        when(fixture.executor.tryLock(eq(GLOBAL_LOCK_KEY), eq(LockType.REENTRANT), eq(0L), eq(-1L), eq(TimeUnit.SECONDS)))
                 .thenReturn(true);
 
-        DistributedLockInterceptor interceptor = new DistributedLockInterceptor(executor, keyResolver, properties);
-        Object result = interceptor.invoke(invocation);
+        Object result = fixture.interceptor().invoke(fixture.invocation);
 
         assertThat(result).isEqualTo("default:z");
-        verify(executor).unlock("global:core", LockType.REENTRANT);
+        verify(fixture.executor).unlock(GLOBAL_LOCK_KEY, LockType.REENTRANT);
     }
 
     @Test
     void invokeThrowsWhenLockNotAcquired() throws Throwable {
         // Failed acquisition should surface as exception.
-        SampleService target = new SampleService();
-        Method method = SampleService.class.getDeclaredMethod("locked", String.class);
-        MethodInvocation invocation = mock(MethodInvocation.class);
-        DistributedLockExecutor executor = mock(DistributedLockExecutor.class);
-        LockKeyResolver keyResolver = mock(LockKeyResolver.class);
-        DistributedLockProperties properties = new DistributedLockProperties();
-
-        when(invocation.getMethod()).thenReturn(method);
-        when(invocation.getThis()).thenReturn(target);
-        when(invocation.getArguments()).thenReturn(new Object[]{"x"});
-        when(keyResolver.resolveKey(eq(method), any(Object[].class), eq(target), eq("#p0"))).thenReturn("core");
-        when(executor.tryLock(eq("method:core"), eq(LockType.FAIR), eq(5L), eq(10L), eq(TimeUnit.SECONDS)))
+        InvocationFixture fixture = fixtureFor("locked", "x");
+        fixture.stubResolvedKey(KEY_EXPRESSION, RESOLVED_KEY);
+        when(fixture.executor.tryLock(eq(METHOD_LOCK_KEY), eq(LockType.FAIR), eq(WAIT_TIME), eq(LEASE_TIME), eq(TIME_UNIT)))
                 .thenReturn(false);
 
-        DistributedLockInterceptor interceptor = new DistributedLockInterceptor(executor, keyResolver, properties);
-
-        assertThatThrownBy(() -> interceptor.invoke(invocation))
+        assertThatThrownBy(() -> fixture.interceptor().invoke(fixture.invocation))
                 .isInstanceOf(DistributedLockException.class)
-                .hasMessageContaining("Failed to acquire lock for key: method:core");
-        verify(executor, never()).unlock(any(), any());
+                .hasMessageContaining("Failed to acquire lock for key: " + METHOD_LOCK_KEY);
+        verify(fixture.executor, never()).unlock(any(), any());
     }
 
     @Test
     void invokeWrapsExceptionsFromExecutor() throws Throwable {
         // Executor exceptions are wrapped with lock context.
-        SampleService target = new SampleService();
-        Method method = SampleService.class.getDeclaredMethod("locked", String.class);
-        MethodInvocation invocation = mock(MethodInvocation.class);
-        DistributedLockExecutor executor = mock(DistributedLockExecutor.class);
-        LockKeyResolver keyResolver = mock(LockKeyResolver.class);
-        DistributedLockProperties properties = new DistributedLockProperties();
-
-        when(invocation.getMethod()).thenReturn(method);
-        when(invocation.getThis()).thenReturn(target);
-        when(invocation.getArguments()).thenReturn(new Object[]{"x"});
-        when(keyResolver.resolveKey(eq(method), any(Object[].class), eq(target), eq("#p0"))).thenReturn("core");
-        when(executor.tryLock(eq("method:core"), eq(LockType.FAIR), eq(5L), eq(10L), eq(TimeUnit.SECONDS)))
+        InvocationFixture fixture = fixtureFor("locked", "x");
+        fixture.stubResolvedKey(KEY_EXPRESSION, RESOLVED_KEY);
+        when(fixture.executor.tryLock(eq(METHOD_LOCK_KEY), eq(LockType.FAIR), eq(WAIT_TIME), eq(LEASE_TIME), eq(TIME_UNIT)))
                 .thenThrow(new IllegalStateException("boom"));
 
-        DistributedLockInterceptor interceptor = new DistributedLockInterceptor(executor, keyResolver, properties);
-
-        assertThatThrownBy(() -> interceptor.invoke(invocation))
+        assertThatThrownBy(() -> fixture.interceptor().invoke(fixture.invocation))
                 .isInstanceOf(DistributedLockException.class)
                 .hasCauseInstanceOf(IllegalStateException.class);
     }
@@ -182,34 +140,37 @@ class DistributedLockInterceptorTest {
     @Test
     void invokeAlwaysUnlocksEvenWhenProceedThrows() throws Throwable {
         // Unlock should still run on invocation failure.
-        SampleService target = new SampleService();
-        Method method = SampleService.class.getDeclaredMethod("locked", String.class);
-        MethodInvocation invocation = mock(MethodInvocation.class);
-        DistributedLockExecutor executor = mock(DistributedLockExecutor.class);
-        LockKeyResolver keyResolver = mock(LockKeyResolver.class);
-        DistributedLockProperties properties = new DistributedLockProperties();
-
-        when(invocation.getMethod()).thenReturn(method);
-        when(invocation.getThis()).thenReturn(target);
-        when(invocation.getArguments()).thenReturn(new Object[]{"x"});
-        when(keyResolver.resolveKey(eq(method), any(Object[].class), eq(target), eq("#p0"))).thenReturn("core");
-        when(executor.tryLock(eq("method:core"), eq(LockType.FAIR), eq(5L), eq(10L), eq(TimeUnit.SECONDS)))
+        InvocationFixture fixture = fixtureFor("locked", "x");
+        fixture.stubResolvedKey(KEY_EXPRESSION, RESOLVED_KEY);
+        when(fixture.executor.tryLock(eq(METHOD_LOCK_KEY), eq(LockType.FAIR), eq(WAIT_TIME), eq(LEASE_TIME), eq(TIME_UNIT)))
                 .thenReturn(true);
-        when(invocation.proceed()).thenThrow(new IllegalArgumentException("fail"));
+        fixture.whenProceedThrow(new IllegalArgumentException("fail"));
 
-        DistributedLockInterceptor interceptor = new DistributedLockInterceptor(executor, keyResolver, properties);
-
-        assertThatThrownBy(() -> interceptor.invoke(invocation))
+        assertThatThrownBy(() -> fixture.interceptor().invoke(fixture.invocation))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("fail");
-        verify(executor).unlock("method:core", LockType.FAIR);
+        verify(fixture.executor).unlock(METHOD_LOCK_KEY, LockType.FAIR);
     }
 
     @Test
     void invokeSwallowsUnlockExceptions() throws Throwable {
         // Unlock failures are logged, not propagated.
+        InvocationFixture fixture = fixtureFor("locked", "x");
+        fixture.whenProceedReturn("locked:x");
+        fixture.stubResolvedKey(KEY_EXPRESSION, RESOLVED_KEY);
+        when(fixture.executor.tryLock(eq(METHOD_LOCK_KEY), eq(LockType.FAIR), eq(WAIT_TIME), eq(LEASE_TIME), eq(TIME_UNIT)))
+                .thenReturn(true);
+        doThrow(new IllegalStateException("unlock"))
+                .when(fixture.executor).unlock(METHOD_LOCK_KEY, LockType.FAIR);
+
+        Object result = fixture.interceptor().invoke(fixture.invocation);
+
+        assertThat(result).isEqualTo("locked:x");
+    }
+
+    private static InvocationFixture fixtureFor(String methodName, String arg) throws Exception {
         SampleService target = new SampleService();
-        Method method = SampleService.class.getDeclaredMethod("locked", String.class);
+        Method method = SampleService.class.getDeclaredMethod(methodName, String.class);
         MethodInvocation invocation = mock(MethodInvocation.class);
         DistributedLockExecutor executor = mock(DistributedLockExecutor.class);
         LockKeyResolver keyResolver = mock(LockKeyResolver.class);
@@ -217,17 +178,44 @@ class DistributedLockInterceptorTest {
 
         when(invocation.getMethod()).thenReturn(method);
         when(invocation.getThis()).thenReturn(target);
-        when(invocation.getArguments()).thenReturn(new Object[]{"x"});
-        when(invocation.proceed()).thenReturn("locked:x");
-        when(keyResolver.resolveKey(eq(method), any(Object[].class), eq(target), eq("#p0"))).thenReturn("core");
-        when(executor.tryLock(eq("method:core"), eq(LockType.FAIR), eq(5L), eq(10L), eq(TimeUnit.SECONDS)))
-                .thenReturn(true);
-        doThrow(new IllegalStateException("unlock"))
-                .when(executor).unlock("method:core", LockType.FAIR);
+        when(invocation.getArguments()).thenReturn(new Object[]{arg});
+        return new InvocationFixture(target, method, invocation, executor, keyResolver, properties);
+    }
 
-        DistributedLockInterceptor interceptor = new DistributedLockInterceptor(executor, keyResolver, properties);
-        Object result = interceptor.invoke(invocation);
+    private static final class InvocationFixture {
+        private final SampleService target;
+        private final Method method;
+        private final MethodInvocation invocation;
+        private final DistributedLockExecutor executor;
+        private final LockKeyResolver keyResolver;
+        private final DistributedLockProperties properties;
 
-        assertThat(result).isEqualTo("locked:x");
+        private InvocationFixture(SampleService target, Method method, MethodInvocation invocation,
+                                  DistributedLockExecutor executor, LockKeyResolver keyResolver,
+                                  DistributedLockProperties properties) {
+            this.target = target;
+            this.method = method;
+            this.invocation = invocation;
+            this.executor = executor;
+            this.keyResolver = keyResolver;
+            this.properties = properties;
+        }
+
+        private DistributedLockInterceptor interceptor() {
+            return new DistributedLockInterceptor(executor, keyResolver, properties);
+        }
+
+        private void stubResolvedKey(String expression, String resolved) {
+            when(keyResolver.resolveKey(eq(method), any(Object[].class), eq(target), eq(expression)))
+                    .thenReturn(resolved);
+        }
+
+        private void whenProceedReturn(Object value) throws Throwable {
+            when(invocation.proceed()).thenReturn(value);
+        }
+
+        private void whenProceedThrow(Throwable throwable) throws Throwable {
+            when(invocation.proceed()).thenThrow(throwable);
+        }
     }
 }

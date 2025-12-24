@@ -42,113 +42,84 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class EtcdDistributedLockExecutorTest {
+    private static final String KEY = "k";
+    private static final ByteSequence LOCK_KEY = ByteSequence.from(KEY, StandardCharsets.UTF_8);
+
     @Test
     void tryLockAcquiresAndUnlocks() throws Exception {
         // Successful lock should revoke lease on unlock.
-        Client client = mock(Client.class);
-        Lock lockClient = mock(Lock.class);
-        Lease leaseClient = mock(Lease.class);
-        LeaseGrantResponse grantResponse = mock(LeaseGrantResponse.class);
+        EtcdFixture fixture = fixture(12L, 1L);
         LockResponse lockResponse = mock(LockResponse.class);
         UnlockResponse unlockResponse = mock(UnlockResponse.class);
         LeaseRevokeResponse revokeResponse = mock(LeaseRevokeResponse.class);
         CloseableClient keepAliveClient = mock(CloseableClient.class);
 
-        when(client.getLockClient()).thenReturn(lockClient);
-        when(client.getLeaseClient()).thenReturn(leaseClient);
-        when(grantResponse.getID()).thenReturn(12L);
-        when(leaseClient.grant(1L)).thenReturn(CompletableFuture.completedFuture(grantResponse));
+        when(lockResponse.getKey()).thenReturn(LOCK_KEY);
+        when(fixture.lockClient.lock(eq(LOCK_KEY), eq(12L))).thenReturn(CompletableFuture.completedFuture(lockResponse));
+        when(fixture.lockClient.unlock(eq(LOCK_KEY))).thenReturn(CompletableFuture.completedFuture(unlockResponse));
+        when(fixture.leaseClient.keepAlive(eq(12L), any(StreamObserver.class))).thenReturn(keepAliveClient);
+        when(fixture.leaseClient.revoke(12L)).thenReturn(CompletableFuture.completedFuture(revokeResponse));
 
-        ByteSequence lockKey = ByteSequence.from("k", StandardCharsets.UTF_8);
-        when(lockResponse.getKey()).thenReturn(lockKey);
-        when(lockClient.lock(eq(lockKey), eq(12L))).thenReturn(CompletableFuture.completedFuture(lockResponse));
-        when(lockClient.unlock(eq(lockKey))).thenReturn(CompletableFuture.completedFuture(unlockResponse));
-        when(leaseClient.keepAlive(eq(12L), any(StreamObserver.class))).thenReturn(keepAliveClient);
-        when(leaseClient.revoke(12L)).thenReturn(CompletableFuture.completedFuture(revokeResponse));
-
-        EtcdDistributedLockExecutor executor = new EtcdDistributedLockExecutor(client);
-        boolean acquired = executor.tryLock("k", LockType.REENTRANT, -1, 1, TimeUnit.SECONDS);
+        EtcdDistributedLockExecutor executor = new EtcdDistributedLockExecutor(fixture.client);
+        boolean acquired = executor.tryLock(KEY, LockType.REENTRANT, -1, 1, TimeUnit.SECONDS);
 
         assertThat(acquired).isTrue();
-        executor.unlock("k", LockType.REENTRANT);
+        executor.unlock(KEY, LockType.REENTRANT);
         verify(keepAliveClient).close();
-        verify(lockClient).unlock(lockKey);
-        verify(leaseClient).revoke(12L);
+        verify(fixture.lockClient).unlock(LOCK_KEY);
+        verify(fixture.leaseClient).revoke(12L);
     }
 
     @Test
     void tryLockKeepsLeaseAliveWhileWaiting() throws Exception {
         // Wait time longer than lease time should enable keep-alive and refresh after acquire.
-        Client client = mock(Client.class);
-        Lock lockClient = mock(Lock.class);
-        Lease leaseClient = mock(Lease.class);
-        LeaseGrantResponse grantResponse = mock(LeaseGrantResponse.class);
+        EtcdFixture fixture = fixture(21L, 1L);
         LockResponse lockResponse = mock(LockResponse.class);
         CloseableClient keepAliveClient = mock(CloseableClient.class);
 
-        when(client.getLockClient()).thenReturn(lockClient);
-        when(client.getLeaseClient()).thenReturn(leaseClient);
-        when(grantResponse.getID()).thenReturn(21L);
-        when(leaseClient.grant(1L)).thenReturn(CompletableFuture.completedFuture(grantResponse));
-        when(leaseClient.keepAlive(eq(21L), any(StreamObserver.class))).thenReturn(keepAliveClient);
+        when(fixture.leaseClient.keepAlive(eq(21L), any(StreamObserver.class))).thenReturn(keepAliveClient);
+        when(lockResponse.getKey()).thenReturn(LOCK_KEY);
+        when(fixture.lockClient.lock(eq(LOCK_KEY), eq(21L))).thenReturn(CompletableFuture.completedFuture(lockResponse));
 
-        ByteSequence lockKey = ByteSequence.from("k", StandardCharsets.UTF_8);
-        when(lockResponse.getKey()).thenReturn(lockKey);
-        when(lockClient.lock(eq(lockKey), eq(21L))).thenReturn(CompletableFuture.completedFuture(lockResponse));
-
-        EtcdDistributedLockExecutor executor = new EtcdDistributedLockExecutor(client);
-        boolean acquired = executor.tryLock("k", LockType.REENTRANT, 5, 1, TimeUnit.SECONDS);
+        EtcdDistributedLockExecutor executor = new EtcdDistributedLockExecutor(fixture.client);
+        boolean acquired = executor.tryLock(KEY, LockType.REENTRANT, 5, 1, TimeUnit.SECONDS);
 
         assertThat(acquired).isTrue();
         verify(keepAliveClient).close();
-        verify(leaseClient).keepAliveOnce(21L);
+        verify(fixture.leaseClient).keepAliveOnce(21L);
     }
 
     @Test
     void tryLockReturnsFalseOnTimeout() throws Exception {
         // Timeout should cancel the lock attempt and revoke lease.
-        Client client = mock(Client.class);
-        Lock lockClient = mock(Lock.class);
-        Lease leaseClient = mock(Lease.class);
-        LeaseGrantResponse grantResponse = mock(LeaseGrantResponse.class);
+        EtcdFixture fixture = fixture(9L, 30L);
         CompletableFuture<LockResponse> future = mock(CompletableFuture.class);
 
-        when(client.getLockClient()).thenReturn(lockClient);
-        when(client.getLeaseClient()).thenReturn(leaseClient);
-        when(grantResponse.getID()).thenReturn(9L);
-        when(leaseClient.grant(30L)).thenReturn(CompletableFuture.completedFuture(grantResponse));
-        when(lockClient.lock(any(ByteSequence.class), eq(9L))).thenReturn(future);
-        when(leaseClient.revoke(9L)).thenReturn(CompletableFuture.completedFuture(mock(LeaseRevokeResponse.class)));
+        when(fixture.lockClient.lock(any(ByteSequence.class), eq(9L))).thenReturn(future);
+        when(fixture.leaseClient.revoke(9L)).thenReturn(CompletableFuture.completedFuture(mock(LeaseRevokeResponse.class)));
         when(future.get(1, TimeUnit.SECONDS)).thenThrow(new TimeoutException("timeout"));
 
-        EtcdDistributedLockExecutor executor = new EtcdDistributedLockExecutor(client);
-        boolean acquired = executor.tryLock("k", LockType.REENTRANT, 1, 0, TimeUnit.SECONDS);
+        EtcdDistributedLockExecutor executor = new EtcdDistributedLockExecutor(fixture.client);
+        boolean acquired = executor.tryLock(KEY, LockType.REENTRANT, 1, 0, TimeUnit.SECONDS);
 
         assertThat(acquired).isFalse();
         verify(future).cancel(true);
-        verify(leaseClient).revoke(9L);
+        verify(fixture.leaseClient).revoke(9L);
     }
 
     @Test
     void tryLockReInterruptsWhenInterrupted() throws Exception {
         // Interrupted waits should preserve interrupt status.
-        Client client = mock(Client.class);
-        Lock lockClient = mock(Lock.class);
-        Lease leaseClient = mock(Lease.class);
-        LeaseGrantResponse grantResponse = mock(LeaseGrantResponse.class);
+        EtcdFixture fixture = fixture(7L, 30L);
         CompletableFuture<LockResponse> future = mock(CompletableFuture.class);
 
-        when(client.getLockClient()).thenReturn(lockClient);
-        when(client.getLeaseClient()).thenReturn(leaseClient);
-        when(grantResponse.getID()).thenReturn(7L);
-        when(leaseClient.grant(30L)).thenReturn(CompletableFuture.completedFuture(grantResponse));
-        when(lockClient.lock(any(ByteSequence.class), eq(7L))).thenReturn(future);
-        when(leaseClient.revoke(7L)).thenReturn(CompletableFuture.completedFuture(mock(LeaseRevokeResponse.class)));
+        when(fixture.lockClient.lock(any(ByteSequence.class), eq(7L))).thenReturn(future);
+        when(fixture.leaseClient.revoke(7L)).thenReturn(CompletableFuture.completedFuture(mock(LeaseRevokeResponse.class)));
         when(future.get(1, TimeUnit.SECONDS)).thenThrow(new InterruptedException("interrupt"));
 
-        EtcdDistributedLockExecutor executor = new EtcdDistributedLockExecutor(client);
+        EtcdDistributedLockExecutor executor = new EtcdDistributedLockExecutor(fixture.client);
 
-        assertThatThrownBy(() -> executor.tryLock("k", LockType.REENTRANT, 1, 0, TimeUnit.SECONDS))
+        assertThatThrownBy(() -> executor.tryLock(KEY, LockType.REENTRANT, 1, 0, TimeUnit.SECONDS))
                 .isInstanceOf(InterruptedException.class);
         assertThat(Thread.currentThread().isInterrupted()).isTrue();
         Thread.interrupted();
@@ -157,48 +128,59 @@ class EtcdDistributedLockExecutorTest {
     @Test
     void tryLockUsesDefaultLeaseWhenNonPositive() throws Exception {
         // Non-positive leaseTime uses executor default.
-        Client client = mock(Client.class);
-        Lock lockClient = mock(Lock.class);
-        Lease leaseClient = mock(Lease.class);
-        LeaseGrantResponse grantResponse = mock(LeaseGrantResponse.class);
+        EtcdFixture fixture = fixture(3L, 30L);
         LockResponse lockResponse = mock(LockResponse.class);
         CloseableClient keepAliveClient = mock(CloseableClient.class);
 
-        when(client.getLockClient()).thenReturn(lockClient);
-        when(client.getLeaseClient()).thenReturn(leaseClient);
-        when(grantResponse.getID()).thenReturn(3L);
-        when(leaseClient.grant(30L)).thenReturn(CompletableFuture.completedFuture(grantResponse));
-        when(lockClient.lock(any(ByteSequence.class), eq(3L))).thenReturn(CompletableFuture.completedFuture(lockResponse));
-        when(leaseClient.keepAlive(eq(3L), any(StreamObserver.class))).thenReturn(keepAliveClient);
+        when(fixture.lockClient.lock(any(ByteSequence.class), eq(3L))).thenReturn(CompletableFuture.completedFuture(lockResponse));
+        when(fixture.leaseClient.keepAlive(eq(3L), any(StreamObserver.class))).thenReturn(keepAliveClient);
 
-        EtcdDistributedLockExecutor executor = new EtcdDistributedLockExecutor(client);
-        executor.tryLock("k", LockType.REENTRANT, -1, 0, TimeUnit.SECONDS);
+        EtcdDistributedLockExecutor executor = new EtcdDistributedLockExecutor(fixture.client);
+        executor.tryLock(KEY, LockType.REENTRANT, -1, 0, TimeUnit.SECONDS);
 
         verify(keepAliveClient).close();
-        verify(leaseClient).grant(30L);
+        verify(fixture.leaseClient).grant(30L);
     }
 
     @Test
     void tryLockUsesMinimumOneSecondLease() throws Exception {
         // Sub-second leases should be rounded up to 1 second.
+        EtcdFixture fixture = fixture(5L, 1L);
+        LockResponse lockResponse = mock(LockResponse.class);
+        CloseableClient keepAliveClient = mock(CloseableClient.class);
+
+        when(fixture.lockClient.lock(any(ByteSequence.class), eq(5L))).thenReturn(CompletableFuture.completedFuture(lockResponse));
+        when(fixture.leaseClient.keepAlive(eq(5L), any(StreamObserver.class))).thenReturn(keepAliveClient);
+
+        EtcdDistributedLockExecutor executor = new EtcdDistributedLockExecutor(fixture.client);
+        executor.tryLock(KEY, LockType.REENTRANT, -1, 500, TimeUnit.MILLISECONDS);
+
+        verify(keepAliveClient).close();
+        verify(fixture.leaseClient).grant(1L);
+    }
+
+    private static EtcdFixture fixture(long leaseId, long leaseSeconds) {
         Client client = mock(Client.class);
         Lock lockClient = mock(Lock.class);
         Lease leaseClient = mock(Lease.class);
         LeaseGrantResponse grantResponse = mock(LeaseGrantResponse.class);
-        LockResponse lockResponse = mock(LockResponse.class);
-        CloseableClient keepAliveClient = mock(CloseableClient.class);
 
         when(client.getLockClient()).thenReturn(lockClient);
         when(client.getLeaseClient()).thenReturn(leaseClient);
-        when(grantResponse.getID()).thenReturn(5L);
-        when(leaseClient.grant(1L)).thenReturn(CompletableFuture.completedFuture(grantResponse));
-        when(lockClient.lock(any(ByteSequence.class), eq(5L))).thenReturn(CompletableFuture.completedFuture(lockResponse));
-        when(leaseClient.keepAlive(eq(5L), any(StreamObserver.class))).thenReturn(keepAliveClient);
+        when(grantResponse.getID()).thenReturn(leaseId);
+        when(leaseClient.grant(leaseSeconds)).thenReturn(CompletableFuture.completedFuture(grantResponse));
+        return new EtcdFixture(client, lockClient, leaseClient);
+    }
 
-        EtcdDistributedLockExecutor executor = new EtcdDistributedLockExecutor(client);
-        executor.tryLock("k", LockType.REENTRANT, -1, 500, TimeUnit.MILLISECONDS);
+    private static final class EtcdFixture {
+        private final Client client;
+        private final Lock lockClient;
+        private final Lease leaseClient;
 
-        verify(keepAliveClient).close();
-        verify(leaseClient).grant(1L);
+        private EtcdFixture(Client client, Lock lockClient, Lease leaseClient) {
+            this.client = client;
+            this.lockClient = lockClient;
+            this.leaseClient = leaseClient;
+        }
     }
 }

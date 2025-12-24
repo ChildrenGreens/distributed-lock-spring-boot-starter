@@ -32,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 class DistributedLockAutoConfigurationTest {
+    private static final String PROVIDER_REDISSON = "redisson";
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(DistributedLockAutoConfiguration.class));
 
@@ -57,66 +58,73 @@ class DistributedLockAutoConfigurationTest {
     @Test
     void createsRedissonExecutorWhenClientPresent() {
         // Redisson executor should be chosen when RedissonClient is available.
-        contextRunner.withBean(RedissonClient.class, () -> mock(RedissonClient.class))
-                .run(context -> {
-                    assertThat(context).hasSingleBean(DistributedLockExecutor.class);
-                    assertThat(context.getBean(DistributedLockExecutor.class))
-                            .isInstanceOf(RedissonDistributedLockExecutor.class);
-                });
+        assertExecutorType(withRedissonClient(contextRunner), RedissonDistributedLockExecutor.class);
     }
 
     @Test
     void selectsRedissonExecutorWhenProviderSpecified() {
         // Explicit provider selection should win when multiple clients exist.
-        contextRunner
-                .withPropertyValues("distributed.lock.provider=redisson")
-                .withBean(RedissonClient.class, () -> mock(RedissonClient.class))
-                .withBean(CuratorFramework.class, () -> mock(CuratorFramework.class))
-                .run(context -> {
-                    assertThat(context).hasSingleBean(DistributedLockExecutor.class);
-                    assertThat(context.getBean(DistributedLockExecutor.class))
-                            .isInstanceOf(RedissonDistributedLockExecutor.class);
-                });
+        ApplicationContextRunner runner = withProvider(contextRunner, PROVIDER_REDISSON);
+        runner = withRedissonClient(runner);
+        runner = withZookeeperClient(runner);
+        assertExecutorType(runner, RedissonDistributedLockExecutor.class);
     }
 
     @Test
     void doesNotCreateExecutorWhenProviderDoesNotMatch() {
         // Provider selection should disable non-matching executors.
-        contextRunner
-                .withPropertyValues("distributed.lock.provider=redisson")
-                .withBean(CuratorFramework.class, () -> mock(CuratorFramework.class))
-                .run(context -> assertThat(context).doesNotHaveBean(DistributedLockExecutor.class));
+        ApplicationContextRunner runner = withProvider(contextRunner, PROVIDER_REDISSON);
+        runner = withZookeeperClient(runner);
+        assertNoExecutor(runner);
     }
 
     @Test
     void createsZookeeperExecutorWhenClientPresent() {
         // Zookeeper executor should be chosen when CuratorFramework is available.
-        contextRunner.withBean(CuratorFramework.class, () -> mock(CuratorFramework.class))
-                .run(context -> {
-                    assertThat(context).hasSingleBean(DistributedLockExecutor.class);
-                    assertThat(context.getBean(DistributedLockExecutor.class))
-                            .isInstanceOf(ZookeeperDistributedLockExecutor.class);
-                });
+        assertExecutorType(withZookeeperClient(contextRunner), ZookeeperDistributedLockExecutor.class);
     }
 
     @Test
     void createsEtcdExecutorWhenClientPresent() {
         // Etcd executor should be chosen when Client is available.
-        contextRunner.withBean(Client.class, () -> mock(Client.class))
-                .run(context -> {
-                    assertThat(context).hasSingleBean(DistributedLockExecutor.class);
-                    assertThat(context.getBean(DistributedLockExecutor.class))
-                            .isInstanceOf(EtcdDistributedLockExecutor.class);
-                });
+        assertExecutorType(withEtcdClient(contextRunner), EtcdDistributedLockExecutor.class);
     }
 
     @Test
     void respectsUserProvidedExecutor() {
         // Custom executor should override auto-configured ones.
         DistributedLockExecutor customExecutor = mock(DistributedLockExecutor.class);
-        contextRunner
-                .withBean(DistributedLockExecutor.class, () -> customExecutor)
-                .withBean(RedissonClient.class, () -> mock(RedissonClient.class))
-                .run(context -> assertThat(context.getBean(DistributedLockExecutor.class)).isSameAs(customExecutor));
+        ApplicationContextRunner runner = contextRunner
+                .withBean(DistributedLockExecutor.class, () -> customExecutor);
+        runner = withRedissonClient(runner);
+        runner.run(context -> assertThat(context.getBean(DistributedLockExecutor.class)).isSameAs(customExecutor));
+    }
+
+    private static ApplicationContextRunner withProvider(ApplicationContextRunner runner, String provider) {
+        return runner.withPropertyValues("distributed.lock.provider=" + provider);
+    }
+
+    private static ApplicationContextRunner withRedissonClient(ApplicationContextRunner runner) {
+        return runner.withBean(RedissonClient.class, () -> mock(RedissonClient.class));
+    }
+
+    private static ApplicationContextRunner withZookeeperClient(ApplicationContextRunner runner) {
+        return runner.withBean(CuratorFramework.class, () -> mock(CuratorFramework.class));
+    }
+
+    private static ApplicationContextRunner withEtcdClient(ApplicationContextRunner runner) {
+        return runner.withBean(Client.class, () -> mock(Client.class));
+    }
+
+    private static void assertExecutorType(ApplicationContextRunner runner,
+                                           Class<? extends DistributedLockExecutor> executorType) {
+        runner.run(context -> {
+            assertThat(context).hasSingleBean(DistributedLockExecutor.class);
+            assertThat(context.getBean(DistributedLockExecutor.class)).isInstanceOf(executorType);
+        });
+    }
+
+    private static void assertNoExecutor(ApplicationContextRunner runner) {
+        runner.run(context -> assertThat(context).doesNotHaveBean(DistributedLockExecutor.class));
     }
 }

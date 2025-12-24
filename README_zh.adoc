@@ -16,6 +16,10 @@ link:README.adoc[English]
 - Java 17+
 - Spring Boot 4.0.x
 
+== 版本策略
+- Spring Boot 3.x 用户请使用 0.0.x 发布线
+- Spring Boot 4.x 用户请使用 0.1.x 发布线
+
 == 安装
 添加 Starter 依赖，并选择一个后端客户端依赖。
 

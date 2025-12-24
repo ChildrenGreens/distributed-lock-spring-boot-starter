@@ -21,6 +21,10 @@ Supported backends: Redisson, Zookeeper (Curator), and Etcd (jetcd).
 - Java 17+
 - Spring Boot 4.0.x
 
+== Versioning
+- Spring Boot 3.x users should use the 0.0.x release line
+- Spring Boot 4.x users should use the 0.1.x release line
+
 == Installation
 Add the starter dependency and one backend client dependency.
 

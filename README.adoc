@@ -2,6 +2,7 @@ image:https://dl.circleci.com/status-badge/img/circleci/Uy51fPbZSgy15X8yEZTik4/6
 image:https://codecov.io/gh/ChildrenGreens/distributed-lock-spring-boot-starter/branch/main/graph/badge.svg?token=YV49OXIUYD["codecov",link="https://codecov.io/gh/ChildrenGreens/distributed-lock-spring-boot-starter"]
 image:https://img.shields.io/maven-central/v/com.childrengreens/distributed-lock-spring-boot-starter.svg["Maven Central",link="https://central.sonatype.com/artifact/com.childrengreens/distributed-lock-spring-boot-starter"]
 image:https://img.shields.io/hexpm/l/plug.svg["Apache 2",link="http://www.apache.org/licenses/LICENSE-2.0"]
+image:https://app.codacy.com/project/badge/Grade/685f2707d1bf48d7848955e001470367["Codacy code quality", link="https://app.codacy.com/gh/ChildrenGreens/distributed-lock-spring-boot-starter/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade"]
 
 = Distributed-Lock-Spring-Boot-Starter
 
